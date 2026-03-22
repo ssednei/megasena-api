@@ -99,7 +99,13 @@ def gerar(estrategia: str, modo: str, quantidade: int = 1):
         jogos.append(gerar_jogo(estrategia, modo))
 
     return {
-        "ultimo_concurso": int(ultimo_concurso["concurso"]),
-        "data": str(ultimo_concurso["data"]),
-        "jogos": jogos
+    "ultimo_concurso": int(ultimo_concurso["concurso"]),
+    "data": str(ultimo_concurso["data"]),
+    "jogos": jogos,
+    "estatisticas": {
+        "frequencia_total": metrics["Frequência Total"].to_dict(),
+        "frequencia_recente": metrics["Frequência Recente"].to_dict(),
+        "atraso": metrics["Atraso"].to_dict(),
+        "score": metrics["Score Estatístico"].to_dict()
     }
+}
