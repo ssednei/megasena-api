@@ -100,7 +100,8 @@ def gerar(estrategia: str, modo: str, quantidade: int = 1):
 
     return {
     "ultimo_concurso": int(ultimo_concurso["concurso"]),
-    "data": str(ultimo_concurso["data"]),
+"data": str(ultimo_concurso["data"]),
+"resultado_ultimo": ultimo_concurso["dezenas"],
     "jogos": jogos,
     "estatisticas": {
         "frequencia_total": metrics["Frequência Total"].to_dict(),
