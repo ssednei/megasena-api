@@ -91,6 +91,7 @@ def gerar_jogo(estrategia, modo):
 def home():
     return {"status": "API rodando"}
 
+
 @app.get("/gerar-jogos")
 def gerar(estrategia: str, modo: str, quantidade: int = 1):
     jogos = []
@@ -99,14 +100,45 @@ def gerar(estrategia: str, modo: str, quantidade: int = 1):
         jogos.append(gerar_jogo(estrategia, modo))
 
     return {
-    "ultimo_concurso": int(ultimo_concurso["concurso"]),
-"data": str(ultimo_concurso["data"]),
-"resultado_ultimo": ultimo_concurso["dezenas"],
-    "jogos": jogos,
-    "estatisticas": {
-        "frequencia_total": metrics["Frequência Total"].to_dict(),
-        "frequencia_recente": metrics["Frequência Recente"].to_dict(),
-        "atraso": metrics["Atraso"].to_dict(),
-        "score": metrics["Score Estatístico"].to_dict()
+        "ultimo_concurso": int(ultimo_concurso["concurso"]),
+        "data": str(ultimo_concurso["data"]),
+        "resultado_ultimo": ultimo_concurso["dezenas"],
+        "jogos": jogos,
+        "estatisticas": {
+            "frequencia_total": metrics["Frequência Total"].to_dict(),
+            "frequencia_recente": metrics["Frequência Recente"].to_dict(),
+            "atraso": metrics["Atraso"].to_dict(),
+            "score": metrics["Score Estatístico"].to_dict()
+        }
     }
-}
+
+
+# =========================
+# NOVO ENDPOINT (COLE AQUI)
+# =========================
+@app.get("/historico")
+def buscar_historico(concurso: int = None, data: str = None):
+    url = "https://loteriascaixa-api.herokuapp.com/api/megasena"
+    raw = requests.get(url).json()
+    df = pd.DataFrame(raw)
+
+    df["data"] = pd.to_datetime(df["data"], format="%d/%m/%Y")
+
+    if concurso:
+        resultado = df[df["concurso"] == concurso]
+    elif data:
+        data_convertida = pd.to_datetime(data)
+        resultado = df[df["data"] == data_convertida]
+    else:
+        return {"erro": "Informe concurso ou data"}
+
+    if resultado.empty:
+        return {"erro": "Nenhum resultado encontrado"}
+
+    row = resultado.iloc[0]
+
+    return {
+        "concurso": int(row["concurso"]),
+        "data": str(row["data"]),
+        "dezenas": row["dezenas"]
+    }
