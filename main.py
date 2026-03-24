@@ -111,10 +111,10 @@ def gerar_jogo(estrategia, modo):
 def home():
     return {"status": "API rodando"}
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok"}
-
+    
 @app.get("/gerar-jogos")
 def gerar(estrategia: str, modo: str, quantidade: int = 1):
     jogos = []
