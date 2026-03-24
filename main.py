@@ -2,41 +2,74 @@ from fastapi import FastAPI
 import pandas as pd
 import numpy as np
 import requests
+from functools import lru_cache
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-from fastapi.middleware.cors import CORSMiddleware
+# =========================
+
+# CORS
+
+# =========================
 
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+CORSMiddleware,
+allow_origins=["*"],
+allow_credentials=True,
+allow_methods=["*"],
+allow_headers=["*"],
 )
 
 # =========================
-# LOAD DATA
-# =========================
-def load_data():
-    url = "https://loteriascaixa-api.herokuapp.com/api/megasena"
-    raw = requests.get(url).json()
-    df = pd.DataFrame(raw)
-    df["data"] = pd.to_datetime(df["data"], format="%d/%m/%Y")
-    df = df.sort_values("data")
 
-    dezenas = df["dezenas"].apply(lambda x: list(map(int, x)))
-    df_nums = pd.DataFrame(dezenas.tolist(), columns=[f"D{i}" for i in range(1,7)])
-
-    ultimo = df.iloc[-1]
-
-    return df.reset_index(drop=True), df_nums, ultimo
-
-df, df_nums, ultimo_concurso = load_data()
+# CACHE DE DADOS BASE
 
 # =========================
-# MÉTRICAS
+
+@lru_cache(maxsize=1)
+def carregar_dados():
+url = "https://loteriascaixa-api.herokuapp.com/api/megasena"
+raw = requests.get(url).json()
+df = pd.DataFrame(raw)
+
+```
+df["data"] = pd.to_datetime(df["data"], format="%d/%m/%Y")
+df = df.sort_values("data")
+
+return df.reset_index(drop=True)
+```
+
 # =========================
+
+# PREPARAÇÃO DOS DADOS
+
+# =========================
+
+@lru_cache(maxsize=1)
+def preparar_dados():
+df = carregar_dados()
+
+```
+dezenas = df["dezenas"].apply(lambda x: list(map(int, x)))
+df_nums = pd.DataFrame(dezenas.tolist(), columns=[f"D{i}" for i in range(1,7)])
+
+ultimo = df.iloc[-1]
+
+return df, df_nums, ultimo
+```
+
+# =========================
+
+# MÉTRICAS (CACHE)
+
+# =========================
+
+@lru_cache(maxsize=1)
+def calcular_metricas():
+df, df_nums, _ = preparar_dados()
+
+```
 all_numbers = df_nums.values.flatten()
 freq_total = pd.Series(all_numbers).value_counts().sort_index()
 
@@ -60,85 +93,100 @@ metrics["Score Estatístico"] = (
     0.2 * (metrics["Atraso"] / metrics["Atraso"].max())
 )
 
+return metrics
+```
+
 # =========================
+
 # FUNÇÃO PRINCIPAL
+
 # =========================
+
 def gerar_jogo(estrategia, modo):
-    if estrategia == "Mais Frequentes":
-        base = metrics.sort_values("Frequência Total", ascending=False)
-    elif estrategia == "Menos Frequentes":
-        base = metrics.sort_values("Frequência Total")
-    elif estrategia == "Mais Atrasados":
-        base = metrics.sort_values("Atraso", ascending=False)
-    elif estrategia == "Frequência Recente":
-        base = metrics.sort_values("Frequência Recente", ascending=False)
-    else:
-        base = metrics.sort_values("Score Estatístico", ascending=False)
+metrics = calcular_metricas()
 
-    if modo == "Números fixos estatisticamente":
-        jogo = base.head(6).index.tolist()
-    else:
-        pesos = base["Score Estatístico"].values
-        pesos = pesos / pesos.sum()
-        jogo = np.random.choice(base.index, size=6, replace=False, p=pesos).tolist()
+```
+if estrategia == "Mais Frequentes":
+    base = metrics.sort_values("Frequência Total", ascending=False)
+elif estrategia == "Menos Frequentes":
+    base = metrics.sort_values("Frequência Total")
+elif estrategia == "Mais Atrasados":
+    base = metrics.sort_values("Atraso", ascending=False)
+elif estrategia == "Frequência Recente":
+    base = metrics.sort_values("Frequência Recente", ascending=False)
+else:
+    base = metrics.sort_values("Score Estatístico", ascending=False)
 
-    return sorted(jogo)
+if modo == "Números fixos estatisticamente":
+    jogo = base.head(6).index.tolist()
+else:
+    pesos = base["Score Estatístico"].values
+    pesos = pesos / pesos.sum()
+    jogo = np.random.choice(base.index, size=6, replace=False, p=pesos).tolist()
+
+return sorted(jogo)
+```
 
 # =========================
-# ENDPOINT
+
+# ENDPOINTS
+
 # =========================
+
 @app.get("/")
 def home():
-    return {"status": "API rodando"}
+return {"status": "API rodando"}
 
+@app.get("/health")
+def health():
+return {"status": "ok"}
 
 @app.get("/gerar-jogos")
 def gerar(estrategia: str, modo: str, quantidade: int = 1):
-    jogos = []
+jogos = []
 
-    for _ in range(quantidade):
-        jogos.append(gerar_jogo(estrategia, modo))
+```
+for _ in range(quantidade):
+    jogos.append(gerar_jogo(estrategia, modo))
 
-    return {
-        "ultimo_concurso": int(ultimo_concurso["concurso"]),
-        "data": str(ultimo_concurso["data"]),
-        "resultado_ultimo": ultimo_concurso["dezenas"],
-        "jogos": jogos,
-        "estatisticas": {
-            "frequencia_total": metrics["Frequência Total"].to_dict(),
-            "frequencia_recente": metrics["Frequência Recente"].to_dict(),
-            "atraso": metrics["Atraso"].to_dict(),
-            "score": metrics["Score Estatístico"].to_dict()
-        }
+_, _, ultimo_concurso = preparar_dados()
+metrics = calcular_metricas()
+
+return {
+    "ultimo_concurso": int(ultimo_concurso["concurso"]),
+    "data": str(ultimo_concurso["data"]),
+    "resultado_ultimo": ultimo_concurso["dezenas"],
+    "jogos": jogos,
+    "estatisticas": {
+        "frequencia_total": metrics["Frequência Total"].to_dict(),
+        "frequencia_recente": metrics["Frequência Recente"].to_dict(),
+        "atraso": metrics["Atraso"].to_dict(),
+        "score": metrics["Score Estatístico"].to_dict()
     }
+}
+```
 
-
-# =========================
-# NOVO ENDPOINT (COLE AQUI)
-# =========================
 @app.get("/historico")
 def buscar_historico(concurso: int = None, data: str = None):
-    url = "https://loteriascaixa-api.herokuapp.com/api/megasena"
-    raw = requests.get(url).json()
-    df = pd.DataFrame(raw)
+df = carregar_dados()
 
-    df["data"] = pd.to_datetime(df["data"], format="%d/%m/%Y")
+```
+if concurso:
+    resultado = df[df["concurso"] == concurso]
+elif data:
+    data_convertida = pd.to_datetime(data)
+    resultado = df[df["data"] == data_convertida]
+else:
+    return {"erro": "Informe concurso ou data"}
 
-    if concurso:
-        resultado = df[df["concurso"] == concurso]
-    elif data:
-        data_convertida = pd.to_datetime(data)
-        resultado = df[df["data"] == data_convertida]
-    else:
-        return {"erro": "Informe concurso ou data"}
+if resultado.empty:
+    return {"erro": "Nenhum resultado encontrado"}
 
-    if resultado.empty:
-        return {"erro": "Nenhum resultado encontrado"}
+row = resultado.iloc[0]
 
-    row = resultado.iloc[0]
-
-    return {
-        "concurso": int(row["concurso"]),
-        "data": str(row["data"]),
-        "dezenas": row["dezenas"]
-    }
+return {
+    "concurso": int(row["concurso"]),
+    "data": str(row["data"]),
+    "dezenas": row["dezenas"]
+}
+```
