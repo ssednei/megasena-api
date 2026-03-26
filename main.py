@@ -170,3 +170,18 @@ def buscar_historico(concurso: int = None, data: str = None):
         "data": str(row["data"]),
         "dezenas": row["dezenas"]
     }
+
+# =========================
+# DATAS DISPONÍVEIS (NOVO)
+# =========================
+@app.get("/datas-disponiveis")
+def datas_disponiveis():
+    df = carregar_dados()
+
+    # Converte datas para formato padrão (YYYY-MM-DD)
+    datas = df["data"].dt.strftime("%Y-%m-%d").tolist()
+
+    return {
+        "datas": datas
+    }
+
