@@ -21,16 +21,26 @@ app.add_middleware(
 # =========================
 # CACHE DE DADOS BASE
 # =========================
-@lru_cache(maxsize=1)
+import time
+
+CACHE_TEMPO = 300  # 5 minutos
+_cache = {"data": None, "timestamp": 0}
+
 def carregar_dados():
-    url = "https://loteriascaixa-api.herokuapp.com/api/megasena"
-    raw = requests.get(url).json()
-    df = pd.DataFrame(raw)
+    agora = time.time()
 
-    df["data"] = pd.to_datetime(df["data"], format="%d/%m/%Y")
-    df = df.sort_values("data")
+    if _cache["data"] is None or (agora - _cache["timestamp"] > CACHE_TEMPO):
+        url = "https://loteriascaixa-api.herokuapp.com/api/megasena"
+        raw = requests.get(url).json()
+        df = pd.DataFrame(raw)
 
-    return df.reset_index(drop=True)
+        df["data"] = pd.to_datetime(df["data"], format="%d/%m/%Y")
+        df = df.sort_values("data")
+
+        _cache["data"] = df.reset_index(drop=True)
+        _cache["timestamp"] = agora
+
+    return _cache["data"]
 
 # =========================
 # PREPARAÇÃO DOS DADOS
